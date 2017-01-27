@@ -14,4 +14,4 @@
         kubectl:
            command: apply
            args: ""
-           template: "/home/core/bla.yaml"
+           template: "./files/bla.yaml"

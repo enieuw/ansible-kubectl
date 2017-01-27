@@ -68,7 +68,7 @@ class Kubectl:
         resources = self.read_kube_file(filename)
         resource_versions_prior_to_apply = self.fetch_resource_versions(resources)
 
-        rc, out, err = self.module.run_command("/opt/bin/kubectl apply -f " + filename + " " + arguments, use_unsafe_shell=True)
+        rc, out, err = self.module.run_command("cat <<EOF |/opt/bin/kubectl apply -f - \n"  + filename + "\nEOF", use_unsafe_shell=True)
         if rc != 0:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
         else:
@@ -92,28 +92,27 @@ class Kubectl:
 
     def read_kube_file(self, filename):
         result = dict()
-        with open(filename, 'r') as stream:
-            c = stream.read(1)
-            stream.seek(0)
-            if c == '-':
-               try:
-                  for data in yaml.load_all(stream):
+
+        if filename[0] == '-':
+           try:
+              for data in yaml.load_all(filename):
+                name, item = self.parse_item(data)
+                result[name] = item
+           except yaml.YAMLError as exc:
+              print(exc)
+        else:
+            try:
+               data = json.load(filename)
+               if data['kind'] == "List":
+                  for listItem in data['items']:
+                    name, item = self.parse_item(listItem)
+                    result[name] = item
+               else:
                     name, item = self.parse_item(data)
                     result[name] = item
-               except yaml.YAMLError as exc:
-                  print(exc)
-            else:
-                try:
-                   data = json.load(stream)
-                   if data['kind'] == "List":
-                      for listItem in data['items']:
-                        name, item = self.parse_item(listItem)
-                        result[name] = item
-                   else:
-                        name, item = self.parse_item(data)
-                        result[name] = item
-                except ValueError:
-                   print "JSON decode error"
+            except ValueError:
+               print "JSON decode error"
+
         return result
 
     def parse_item(self, item):
