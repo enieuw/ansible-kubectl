@@ -36,7 +36,7 @@ EXAMPLES = """
 - name: kubectl create pod from json input
   kubectl:
      command: apply
-     arguments:  -f <something already on the host>
+     args:  -f <something already on the host>
 # results in kubectl apply -f <rendered template>
 - name: kubectl create pod from json input
   kubectl:
@@ -56,18 +56,23 @@ class Kubectl:
         self.module = module
 
     def kubectl(self):
-        filename = self.module.params['command']
+        command = self.module.params['command']
         args = self.module.params['args']
         template = self.module.params['template']
 
-        command = "kubectl %s %args" % (filename, args)
+        return "/opt/bin/kubectl %s %s" % (command, args)
 
+    def get_output(self, rc=0, out=None, err=None):
+        if rc:
+            self.module.fail_json(msg=err, rc=rc, err=err, out=out)
+        else:
+            self.module.exit_json(changed=1, msg=json.dumps(out))
 
 def main():
     module = AnsibleModule(
             argument_spec = dict(
                 command         = dict(required=True),
-                arguments       = dict(required=False, default=''),
+                args            = dict(required=False, default=''),
                 template        = dict(required=False, default='')
                 ),
             supports_check_mode = False
@@ -75,7 +80,7 @@ def main():
 
 
     kube = Kubectl(module)
-    rc, out, err = module.run_command(kube.kubectl, use_unsafe_shell=True)
+    rc, out, err = module.run_command(kube.kubectl(), use_unsafe_shell=True)
     kube.get_output(rc, out, err)
 
 from ansible.module_utils.basic import *
