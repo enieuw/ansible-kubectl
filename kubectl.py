@@ -55,6 +55,7 @@ output:
 class Kubectl:
     def __init__(self, module):
         self.module = module
+        self.default_namespace = "default"
 
     def kubectl(self):
         command = self.module.params['command']
@@ -74,7 +75,7 @@ class Kubectl:
             failed = False
 
         resource_versions_after_apply = self.fetch_resource_versions(resources)
-        
+
         if resource_versions_prior_to_apply != resource_versions_after_apply:
             changed = True
         else:
@@ -90,7 +91,6 @@ class Kubectl:
         return result
 
     def read_kube_file(self, filename):
-        default_namespace = "default"
         result = dict()
         with open(filename, 'r') as stream:
             c = stream.read(1)
@@ -98,38 +98,34 @@ class Kubectl:
             if c == '-':
                try:
                   for data in yaml.load_all(stream):
-                    name = data['metadata']['name']
-                    result[name] = dict()
-                    result[name]["kind"] = data['kind']
-                    if "namespace" in data['metadata']:
-                        result[name]['namespace'] = data['metadata']['namespace']
-                    else:
-                        result[name]['namespace'] = default_namespace
+                    name, item = self.parse_item(data)
+                    result[name] = item
                except yaml.YAMLError as exc:
                   print(exc)
             else:
                 try:
                    data = json.load(stream)
                    if data['kind'] == "List":
-                      for item in data['items']:
-                        name = item['metadata']['name']
-                        result[name] = dict()
-                        result[name]["kind"] = item['kind']
-                        if "namespace" in item['metadata']:
-                            result[name]['namespace'] = item['metadata']['namespace']
-                        else:
-                            result[name]['namespace'] = default_namespace
+                      for listItem in data['items']:
+                        name, item = self.parse_item(listItem)
+                        result[name] = item
                    else:
-                     name = data['metadata']['name']
-                     result[name] = dict()
-                     result[name]["kind"] = data['kind']
-                     if "namespace" in data['metadata']:
-                        result[name]['namespace'] = data['metadata']['namespace']
-                     else:
-                        result[name]['namespace'] = default_namespace
+                        name, item = self.parse_item(data)
+                        result[name] = item
                 except ValueError:
                    print "JSON decode error"
         return result
+
+    def parse_item(self, item):
+        result = dict()
+        name = item['metadata']['name']
+        result["kind"] = item['kind']
+        if "namespace" in item['metadata']:
+            result['namespace'] = item['metadata']['namespace']
+        else:
+            result['namespace'] = self.default_namespace
+
+        return name,result
     def get_output(self, rc=0, out=None, err=None):
         if rc:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
