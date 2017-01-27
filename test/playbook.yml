@@ -3,4 +3,6 @@
   tasks:
       - name: kubectl
         kubectl:
-           command: cluster-info
+           command: apply
+           args: ""
+           template: "/home/core/bla.yaml"

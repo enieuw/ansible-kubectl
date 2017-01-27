@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import json
+import yaml
 
 ANSIBLE_METADATA = {'status': ['preview'],
                     'supported_by': 'community',
@@ -62,6 +63,73 @@ class Kubectl:
 
         return "/opt/bin/kubectl %s %s" % (command, args)
 
+    def apply(self, arguments, filename):
+        resources = self.read_kube_file(filename)
+        resource_versions_prior_to_apply = self.fetch_resource_versions(resources)
+
+        rc, out, err = self.module.run_command("/opt/bin/kubectl apply -f " + filename + " " + arguments, use_unsafe_shell=True)
+        if rc != 0:
+            self.module.fail_json(msg=err, rc=rc, err=err, out=out)
+        else:
+            failed = False
+
+        resource_versions_after_apply = self.fetch_resource_versions(resources)
+        
+        if resource_versions_prior_to_apply != resource_versions_after_apply:
+            changed = True
+        else:
+            changed = False
+
+        self.module.exit_json(changed=changed, rc=rc, err=err, out=out)
+
+    def fetch_resource_versions(self, resources):
+        result = dict()
+        for name, resourceData in resources.iteritems():
+             rc, out, err = self.module.run_command("/opt/bin/kubectl get -o jsonpath='{.metadata.resourceVersion}' "+ " --namespace=" + resourceData['namespace'] + " " + resourceData['kind'] +  " " + name)
+             result[name] = out
+        return result
+
+    def read_kube_file(self, filename):
+        default_namespace = "default"
+        result = dict()
+        with open(filename, 'r') as stream:
+            c = stream.read(1)
+            stream.seek(0)
+            if c == '-':
+               try:
+                  for data in yaml.load_all(stream):
+                    name = data['metadata']['name']
+                    result[name] = dict()
+                    result[name]["kind"] = data['kind']
+                    if "namespace" in data['metadata']:
+                        result[name]['namespace'] = data['metadata']['namespace']
+                    else:
+                        result[name]['namespace'] = default_namespace
+               except yaml.YAMLError as exc:
+                  print(exc)
+            else:
+                try:
+                   data = json.load(stream)
+                   if data['kind'] == "List":
+                      for item in data['items']:
+                        name = item['metadata']['name']
+                        result[name] = dict()
+                        result[name]["kind"] = item['kind']
+                        if "namespace" in item['metadata']:
+                            result[name]['namespace'] = item['metadata']['namespace']
+                        else:
+                            result[name]['namespace'] = default_namespace
+                   else:
+                     name = data['metadata']['name']
+                     result[name] = dict()
+                     result[name]["kind"] = data['kind']
+                     if "namespace" in data['metadata']:
+                        result[name]['namespace'] = data['metadata']['namespace']
+                     else:
+                        result[name]['namespace'] = default_namespace
+                except ValueError:
+                   print "JSON decode error"
+        return result
     def get_output(self, rc=0, out=None, err=None):
         if rc:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
@@ -80,8 +148,11 @@ def main():
 
 
     kube = Kubectl(module)
-    rc, out, err = module.run_command(kube.kubectl(), use_unsafe_shell=True)
-    kube.get_output(rc, out, err)
+    if module.params['command'] == "apply":
+        kube.apply(module.params['args'],module.params['template'])
+    else:
+        rc, out, err = module.run_command(kube.kubectl(), use_unsafe_shell=True)
+        kube.get_output(rc, out, err)
 
 from ansible.module_utils.basic import *
 
