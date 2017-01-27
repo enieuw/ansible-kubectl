@@ -1,15 +1,15 @@
 ---
 - hosts: masters
   tasks:
-      - name: tempdir
-        register: tempdir
-        tempfile:
-          state: directory
-          suffix: test
-      - name: copy
-        copy:
-           src: files/bla.yaml
-           dest: "{{ tempdir.path }}/bla.yaml"
+      # - name: tempdir
+      #   register: tempdir
+      #   tempfile:
+      #     state: directory
+      #     suffix: test
+      # - name: copy
+      #   copy:
+      #      src: files/bla.yaml
+      #      dest: "{{ tempdir.path }}/bla.yaml"
       - name: kubectl
         kubectl:
            command: apply
