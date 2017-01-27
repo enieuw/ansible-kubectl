@@ -62,7 +62,7 @@ class Kubectl:
         args = self.module.params['args']
         template = self.module.params['template']
 
-        return "/opt/bin/kubectl %s %s" % (command, args)
+        return "kubectl %s %s" % (command, args)
 
     def apply(self, arguments, filename):
         resources = self.read_kube_file(filename)
