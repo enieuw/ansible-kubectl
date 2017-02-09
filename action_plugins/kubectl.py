@@ -45,7 +45,7 @@ class ActionModule(ActionBase):
             try:
                 with open(b_source, 'r') as f:
                     template_data = to_text(f.read())
-                    self._templar.template(template_data, preserve_trailing_newlines=True, escape_backslashes=False, convert_data=False)
+                    template_data = self._templar.template(template_data, preserve_trailing_newlines=True, escape_backslashes=False, convert_data=False)
 
             except Exception as e:
                 result['failed'] = True
