@@ -24,6 +24,9 @@ from ansible.errors import AnsibleError
 from ansible.plugins.action import ActionBase
 from ansible.module_utils._text import to_bytes, to_native, to_text
 
+from random import choice
+import string
+
 import re
 import os
 import errno
@@ -58,14 +61,14 @@ class ActionModule(ActionBase):
                 result['msg'] = type(e).__name__ + ": " + str(e)
                 return result
         else:
-            self._task.args['template'] = template_data
+            self._task.args['template'] = None
 
         result.update(self._execute_module(module_name='kubectl', module_args=self._task.args, task_vars=task_vars))
         return result
 
     def write_tempfile(self, filename, template_data):
-        tempfile_name = re.sub(r"\.j2", "", filename)
-        tempfile_path = os.getcwd() + '/tmp/' + tempfile_name
+        tempfile_name = self.get_random_string() + '-' + re.sub(r"\.j2", "", filename)
+        tempfile_path = os.getcwd() + '/tmp/ansible/' + tempfile_name
 
         try:
             os.makedirs(os.path.dirname(tempfile_path))
@@ -80,3 +83,8 @@ class ActionModule(ActionBase):
         tempfile.close()
 
         return tempfile_path
+
+    def get_random_string(self):
+        random_string = ''.join([choice(string.ascii_letters + string.digits) for n in xrange(8)])
+
+        return random_string

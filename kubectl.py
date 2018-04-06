@@ -2,6 +2,7 @@
 
 import json
 import yaml
+import os
 
 ANSIBLE_METADATA = {'status': ['preview'],
                     'supported_by': 'community',
@@ -60,19 +61,25 @@ class Kubectl:
     def kubectl(self):
         command = self.module.params['command']
         args = self.module.params['args']
-        template = self.module.params['template']
 
         return "kubectl %s %s" % (command, args)
 
-    def apply(self, args, template):
-        resources = self.read_kube_file(template)
+    def apply(self, args, tempfile):
+        resources = self.read_kube_file(tempfile)
         resource_versions_prior_to_apply = self.fetch_resource_versions(resources)
 
-        rc, out, err = self.module.run_command('kubectl apply ' + args + ' -f ' + template , use_unsafe_shell=True)
+        rc, out, err = self.module.run_command('kubectl apply ' + args + ' -f ' + tempfile , use_unsafe_shell=True)
         if rc != 0:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
         else:
             failed = False
+
+        # Cleanup temporary files
+        try:
+            os.remove(tempfile)
+        except OSError as exc:
+            if exc.errno != errno.ENOENT:
+                raise
 
         resource_versions_after_apply = self.fetch_resource_versions(resources)
 
@@ -161,7 +168,7 @@ def main():
             )
 
     kube = Kubectl(module)
-    if module.params['command'] == "apply":
+    if module.params['command'] == "apply" and module.params['template']:
         kube.apply(module.params['args'],module.params['template'])
     else:
         rc, out, err = module.run_command(kube.kubectl(), use_unsafe_shell=True)
