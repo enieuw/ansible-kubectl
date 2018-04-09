@@ -30,6 +30,7 @@ import string
 import re
 import os
 import errno
+import tempfile
 
 class ActionModule(ActionBase):
     def run(self, tmp=None, task_vars=None):
@@ -37,6 +38,7 @@ class ActionModule(ActionBase):
         args = self._task.args.get('args', None)
         template = filename = self._task.args.get('template', None)
         template_data = None
+        tempfile_dir = None
         result = super(ActionModule, self).run(tmp, task_vars)
 
         if template:
@@ -54,7 +56,7 @@ class ActionModule(ActionBase):
                     template_data = to_text(f.read())
                     template_data = self._templar.template(template_data, preserve_trailing_newlines=True, escape_backslashes=False, convert_data=False)
 
-                self._task.args['template'] = self.write_tempfile(filename, template_data)
+                self._task.args['template'], tempfile_dir = self.write_tempfile(filename, template_data)
 
             except Exception as e:
                 result['failed'] = True
@@ -64,27 +66,24 @@ class ActionModule(ActionBase):
             self._task.args['template'] = None
 
         result.update(self._execute_module(module_name='kubectl', module_args=self._task.args, task_vars=task_vars))
+
+        if template:
+            self.cleanup_tempfiles(self._task.args['template'], tempfile_dir)
+
         return result
 
     def write_tempfile(self, filename, template_data):
-        tempfile_name = self.get_random_string() + '-' + re.sub(r"\.j2", "", filename)
-        tempfile_path = os.getcwd() + '/tmp/ansible/' + tempfile_name
+        tempfile_name = re.sub(r"(.*\/)?(.*\.(yml|yaml|json))(\.j2)?", r"\2", filename, flags=re.IGNORECASE)
+        tempfile_dir = tempfile.mkdtemp()
+        tempfile_path = os.path.join(tempfile_dir, tempfile_name)
 
-        try:
-            os.makedirs(os.path.dirname(tempfile_path))
-        except OSError as exc:
-            if exc.errno != errno.EEXIST:
-                raise
-
-        tempfile = open(tempfile_path, 'w')
-
+        template = open(tempfile_path, 'w')
         for line in template_data:
-            tempfile.write(line)
-        tempfile.close()
+            template.write(line)
+        template.close()
 
-        return tempfile_path
-
-    def get_random_string(self):
-        random_string = ''.join([choice(string.ascii_letters + string.digits) for n in xrange(8)])
-
-        return random_string
+        return tempfile_path, tempfile_dir
+    
+    def cleanup_tempfiles(self, filepath, tempfile_dir):
+        os.remove(filepath)
+        os.rmdir(tempfile_dir)

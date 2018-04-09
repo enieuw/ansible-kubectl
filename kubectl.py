@@ -2,7 +2,6 @@
 
 import json
 import yaml
-import os
 
 ANSIBLE_METADATA = {'status': ['preview'],
                     'supported_by': 'community',
@@ -73,13 +72,6 @@ class Kubectl:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
         else:
             failed = False
-
-        # Cleanup temporary files
-        try:
-            os.remove(tempfile)
-        except OSError as exc:
-            if exc.errno != errno.ENOENT:
-                raise
 
         resource_versions_after_apply = self.fetch_resource_versions(resources)
 
