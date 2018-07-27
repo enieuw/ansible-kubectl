@@ -60,15 +60,14 @@ class Kubectl:
     def kubectl(self):
         command = self.module.params['command']
         args = self.module.params['args']
-        template = self.module.params['template']
 
         return "kubectl %s %s" % (command, args)
 
-    def apply(self, arguments, filename):
-        resources = self.read_kube_file(filename)
+    def apply(self, args, tempfile):
+        resources = self.read_kube_file(tempfile)
         resource_versions_prior_to_apply = self.fetch_resource_versions(resources)
 
-        rc, out, err = self.module.run_command("cat <<EOF |/opt/bin/kubectl apply -f - \n"  + filename + "\nEOF", use_unsafe_shell=True)
+        rc, out, err = self.module.run_command('kubectl apply ' + args + ' -f ' + tempfile , use_unsafe_shell=True)
         if rc != 0:
             self.module.fail_json(msg=err, rc=rc, err=err, out=out)
         else:
@@ -86,32 +85,51 @@ class Kubectl:
     def fetch_resource_versions(self, resources):
         result = dict()
         for name, resourceData in resources.iteritems():
-             rc, out, err = self.module.run_command("/opt/bin/kubectl get -o jsonpath='{.metadata.resourceVersion}' "+ " --namespace=" + resourceData['namespace'] + " " + resourceData['kind'] +  " " + name)
+             rc, out, err = self.module.run_command("kubectl get -o jsonpath='{.metadata.resourceVersion}' "+ " --namespace=" + resourceData['namespace'] + " " + resourceData['kind'] +  " " + name)
              result[name] = out
         return result
 
     def read_kube_file(self, filename):
         result = dict()
 
-        if filename[0] == '-':
-           try:
-              for data in yaml.load_all(filename):
-                name, item = self.parse_item(data)
-                result[name] = item
-           except yaml.YAMLError as exc:
-              print(exc)
+        if filename.endswith('.yaml') or filename.endswith('.yml'):
+            result = self.process_yaml(filename)
+        elif filename.endswith('.json'):
+            result = self.process_json(filename)
         else:
+            raise ValueError('Unsupported file extension.')
+
+        return result
+
+    def process_yaml(self, filename):
+        result = dict()
+
+        with open(filename, 'r') as f:
             try:
-               data = json.load(filename)
-               if data['kind'] == "List":
-                  for listItem in data['items']:
-                    name, item = self.parse_item(listItem)
-                    result[name] = item
-               else:
+                for data in yaml.load_all(f):
                     name, item = self.parse_item(data)
                     result[name] = item
+                f.close()
+            except yaml.YAMLError as exc:
+                print(exc)
+
+        return result
+
+    def process_json(self, filename):
+        result = dict()
+
+        with open(filename, 'r') as f:
+            try:
+                data = json.load(f)
+                if data['kind'] == "List":
+                    for listItem in data['items']:
+                        name, item = self.parse_item(listItem)
+                        result[name] = item
+                else:
+                        name, item = self.parse_item(data)
+                        result[name] = item
             except ValueError:
-               print "JSON decode error"
+                print "JSON decode error"
 
         return result
 
@@ -141,9 +159,8 @@ def main():
             supports_check_mode = False
             )
 
-
     kube = Kubectl(module)
-    if module.params['command'] == "apply":
+    if module.params['command'] == "apply" and module.params['template']:
         kube.apply(module.params['args'],module.params['template'])
     else:
         rc, out, err = module.run_command(kube.kubectl(), use_unsafe_shell=True)
